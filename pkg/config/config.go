@@ -18,6 +18,7 @@ package config
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"github.com/spf13/viper"
 
@@ -160,4 +161,40 @@ func WarpDriveServiceName() string {
 
 func GetServiceAddress(name string, port int32) string {
 	return fmt.Sprintf("http://%s:%d", name, port)
+}
+
+func MinioServiceInfo() *setting.ServiceInfo {
+	return GetServiceByCode(setting.Minio)
+}
+
+func MinioServiceName() string {
+	return MinioServiceInfo().Name
+}
+
+func DataPath() string {
+	return "/app/data"
+}
+
+func ObjectStorageServicePath(project, service string) string {
+	return filepath.Join(project, "service", service)
+}
+
+func ObjectStorageTemplatePath(name, kind string) string {
+	return filepath.Join("templates", kind, name)
+}
+
+func ObjectStorageChartTemplatePath(name string) string {
+	return ObjectStorageTemplatePath(name, setting.ChartTemplatesPath)
+}
+
+func LocalServicePath(project, service string) string {
+	return filepath.Join(DataPath(), project, service)
+}
+
+func LocalTemplatePath(name, kind string) string {
+	return filepath.Join(DataPath(), "templates", kind, name)
+}
+
+func LocalChartTemplatePath(name string) string {
+	return LocalTemplatePath(name, setting.ChartTemplatesPath)
 }

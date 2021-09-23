@@ -176,7 +176,7 @@ const (
 
 	APIVersionAppsV1 = "apps/v1"
 
-	DefaultCandidateImagePullSecret = "default-candidate-registry-secret"
+	DefaultImagePullSecret = "default-registry-secret"
 )
 
 const (
@@ -209,6 +209,10 @@ const (
 	SourceFromGithub = "github"
 	// SourceFromGitlab 配置来源为gerrit
 	SourceFromGerrit = "gerrit"
+	// SourceFromCodeHub 配置来源为codehub
+	SourceFromCodeHub = "codehub"
+	// SourceFromIlyshin 配置来源为ilyshin
+	SourceFromIlyshin = "ilyshin"
 	// SourceFromGUI 配置来源为gui
 	SourceFromGUI = "gui"
 	//SourceFromHelm
@@ -223,7 +227,7 @@ const (
 	TypeEnableCronjob  = "enable"
 	TypeDisableCronjob = "disable"
 
-	PUBLICSERVICE = "public"
+	PublicService = "public"
 
 	// onboarding流程第二步
 	OnboardingStatusSecond = 2
@@ -242,13 +246,11 @@ const (
 
 const (
 	SessionUsername     = "Username"
-	AuthPrefix          = "X-ROOT-API-KEY "
 	SessionUser         = "User"
-	USERAPIKEY          = "X-API-KEY"
+	UserAPIKey          = "X-API-KEY"
 	RootAPIKey          = "X-ROOT-API-KEY"
 	TIMERAPIKEY         = "X-TIMER-API-KEY"
 	AuthorizationHeader = "Authorization"
-	CookieHeader        = "Cookie"
 )
 
 //install script constants
@@ -337,7 +339,7 @@ const (
 	// TemplatesDir
 	TemplatesDir = "templates"
 	// ServiceTemplateCounterName 服务模板counter name
-	ServiceTemplateCounterName = "service:%s&type:%s"
+	ServiceTemplateCounterName = "service:%s&project:%s"
 	// GerritDefaultOwner
 	GerritDefaultOwner = "dafault"
 	// YamlFileSeperator ...
@@ -440,6 +442,39 @@ const (
 	TopicCronjob      = "cronjob"
 )
 
+// S3 related constants
+const (
+	S3DefaultRegion = "ap-shanghai"
+)
+
+// ALL provider mapping
+const (
+	ProviderSourceETC = iota
+	ProviderSourceAli
+	ProviderSourceTencent
+	ProviderSourceQiniu
+	ProviderSourceHuawei
+	ProviderSourceSystemDefault
+)
+
+// helm related
+const (
+	ValuesYamlSourceFreeEdit = "freeEdit"
+	ValuesYamlSourceGitRepo = "gitRepo"
+)
+
+// Aliyun specific stuff
+const (
+	AliyunHost = ".aliyuncs.com"
+)
+
 const MaxTries = 1
 
 const DogFood = "/var/run/koderover-dog-food"
+
+const (
+	ResponseError = "error"
+	ResponseData  = "response"
+)
+
+const ChartTemplatesPath = "charts"

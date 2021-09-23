@@ -17,7 +17,6 @@ limitations under the License.
 package service
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -36,6 +35,7 @@ import (
 	workflowservice "github.com/koderover/zadig/pkg/microservice/aslan/core/workflow/service/workflow"
 	"github.com/koderover/zadig/pkg/setting"
 	e "github.com/koderover/zadig/pkg/tool/errors"
+	s3tool "github.com/koderover/zadig/pkg/tool/s3"
 	"github.com/koderover/zadig/pkg/util"
 )
 
@@ -83,9 +83,9 @@ func HandleCronjob(testing *commonmodels.Testing, log *zap.SugaredLogger) error 
 			payload.Action = setting.TypeDisableCronjob
 		}
 		pl, _ := json.Marshal(payload)
-		err := nsq.Publish(config.TopicCronjob, pl)
+		err := nsq.Publish(setting.TopicCronjob, pl)
 		if err != nil {
-			log.Errorf("Failed to publish to nsq topic: %s, the error is: %v", config.TopicCronjob, err)
+			log.Errorf("Failed to publish to nsq topic: %s, the error is: %v", setting.TopicCronjob, err)
 			return e.ErrUpsertCronjob.AddDesc(err.Error())
 		}
 	}
@@ -359,8 +359,17 @@ func GetHTMLTestReport(pipelineName, pipelineType, taskIDStr, testName string, l
 	defer func() {
 		_ = os.Remove(tmpFilename)
 	}()
-
-	err = s3.Download(context.Background(), store, fileName, tmpFilename)
+	forcedPathStyle := true
+	if store.Provider == setting.ProviderSourceAli {
+		forcedPathStyle = false
+	}
+	client, err := s3tool.NewClient(store.Endpoint, store.Ak, store.Sk, store.Insecure, forcedPathStyle)
+	if err != nil {
+		log.Errorf("download html test report error: %s", err)
+		return "", e.ErrGetTestReport.AddErr(err)
+	}
+	objectKey := store.GetObjectPath(fileName)
+	err = client.Download(store.Bucket, objectKey, tmpFilename)
 	if err != nil {
 		log.Errorf("download html test report error: %s", err)
 		return "", e.ErrGetTestReport.AddErr(err)

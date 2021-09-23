@@ -27,6 +27,10 @@ type Router struct{}
 func (*Router) Inject(router *gin.RouterGroup) {
 	router.Use(gin2.Auth())
 
+	{
+		router.GET("/pods/:name", GetContainerLogs)
+	}
+
 	log := router.Group("log")
 	{
 		log.GET("/pipelines/:pipelineName/tasks/:taskId/service/:serviceName", GetBuildJobContainerLogs)

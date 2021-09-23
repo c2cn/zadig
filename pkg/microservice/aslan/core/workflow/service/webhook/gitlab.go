@@ -255,7 +255,7 @@ func updateServiceTemplateByPushEvent(event *EventPush, log *zap.SugaredLogger) 
 		return err
 	}
 
-	address, err := GetGitlabAddress(gitlabEvent.Project.WebURL)
+	address, err := GetAddress(gitlabEvent.Project.WebURL)
 	if err != nil {
 		log.Errorf("GetGitlabAddress failed, error: %v", err)
 		return err
@@ -311,12 +311,11 @@ func updateServiceTemplateByPushEvent(event *EventPush, log *zap.SugaredLogger) 
 }
 
 func GetGitlabServiceTemplates() ([]*commonmodels.Service, error) {
-	opt := &commonrepo.ServiceFindOption{
+	opt := &commonrepo.ServiceListOption{
 		Type:          setting.K8SDeployType,
 		Source:        setting.SourceFromGitlab,
-		ExcludeStatus: setting.ProductStatusDeleting,
 	}
-	return commonrepo.NewServiceColl().List(opt)
+	return commonrepo.NewServiceColl().ListMaxRevisions(opt)
 }
 
 // SyncServiceTemplateFromGitlab Force to sync Service Template to latest commit and content,
@@ -345,7 +344,7 @@ func SyncServiceTemplateFromGitlab(service *commonmodels.Service, log *zap.Sugar
 		return nil
 	}
 	// 在Ensure过程中会检查source，如果source为gitlab，则同步gitlab内容到service中
-	if err := fillServiceTmpl(service, log); err != nil {
+	if err := fillServiceTmpl(setting.WebhookTaskCreator, service, log); err != nil {
 		log.Errorf("ensureServiceTmpl error: %+v", err)
 		return e.ErrValidateTemplate.AddDesc(err.Error())
 	}

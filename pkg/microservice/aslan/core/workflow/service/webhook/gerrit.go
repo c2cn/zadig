@@ -194,12 +194,11 @@ func GetGerritWorkspaceBasePath(repoName string) (string, error) {
 
 // GetGerritServiceTemplates Get all service templates maintained in gerrit
 func GetGerritServiceTemplates() ([]*commonmodels.Service, error) {
-	opt := &commonrepo.ServiceFindOption{
-		Type:          setting.K8SDeployType,
-		Source:        setting.SourceFromGerrit,
-		ExcludeStatus: setting.ProductStatusDeleting,
+	opt := &commonrepo.ServiceListOption{
+		Type:   setting.K8SDeployType,
+		Source: setting.SourceFromGerrit,
 	}
-	return commonrepo.NewServiceColl().List(opt)
+	return commonrepo.NewServiceColl().ListMaxRevisions(opt)
 }
 
 // SyncServiceTemplateFromGerrit Force to sync Service Template to latest commit and content,
@@ -278,7 +277,7 @@ func ensureServiceTmpl(userName string, args *commonmodels.Service, log *zap.Sug
 			// 替换分隔符
 			args.Yaml = util.ReplaceWrapLine(args.Yaml)
 			// 分隔符为\n---\n
-			args.KubeYamls = util.SplitManifests(args.Yaml)
+			args.KubeYamls = SplitYaml(args.Yaml)
 		}
 
 		// 遍历args.KubeYamls，获取 Deployment 或者 StatefulSet 里面所有containers 镜像和名称
@@ -309,7 +308,7 @@ func ensureServiceTmpl(userName string, args *commonmodels.Service, log *zap.Sug
 	}
 
 	// 设置新的版本号
-	serviceTemplate := fmt.Sprintf(setting.ServiceTemplateCounterName, args.ServiceName, args.Type)
+	serviceTemplate := fmt.Sprintf(setting.ServiceTemplateCounterName, args.ServiceName, args.ProductName)
 	rev, err := commonrepo.NewCounterColl().GetNextSeq(serviceTemplate)
 	if err != nil {
 		return fmt.Errorf("get next service template revision error: %v", err)

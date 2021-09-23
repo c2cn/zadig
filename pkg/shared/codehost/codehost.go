@@ -29,6 +29,7 @@ const (
 	GitHubProvider  = "github"
 	GerritProvider  = "gerrit"
 	CodeHubProvider = "codehub"
+	IlyshinProvider = "ilyshin"
 )
 
 type CodeHost struct {
@@ -57,6 +58,8 @@ type Detail struct {
 	Region     string `json:"region"`
 	Username   string `json:"username"`
 	Password   string `json:"password"`
+	AccessKey  string `json:"applicationId"`
+	SecretKey  string `json:"clientSecret"`
 }
 
 func GetCodeHostList() ([]*poetry.CodeHost, error) {
@@ -75,12 +78,13 @@ func GetCodeHostInfo(option *Option) (*poetry.CodeHost, error) {
 			return codeHost, nil
 		} else if option.CodeHostID == 0 && option.CodeHostType != "" {
 			switch option.CodeHostType {
-			case GitLabProvider, GerritProvider, CodeHubProvider:
-				if strings.Contains(option.Address, codeHost.Address) {
+			case GitHubProvider:
+				ns := strings.ToLower(codeHost.Namespace)
+				if strings.Contains(option.Address, codeHost.Address) && option.Namespace == ns {
 					return codeHost, nil
 				}
-			case GitHubProvider:
-				if strings.Contains(option.Address, codeHost.Address) && option.Namespace == codeHost.Namespace {
+			default:
+				if strings.Contains(option.Address, codeHost.Address) {
 					return codeHost, nil
 				}
 			}
@@ -109,6 +113,8 @@ func GetCodehostDetail(codehostID int) (*Detail, error) {
 		codehost.Region,
 		codehost.Username,
 		codehost.Password,
+		codehost.AccessKey,
+		codehost.SecretKey,
 	}
 
 	return detail, nil
@@ -133,6 +139,8 @@ func ListCodehostDetial() ([]*Detail, error) {
 			codehost.Region,
 			codehost.Username,
 			codehost.Password,
+			codehost.AccessKey,
+			codehost.SecretKey,
 		})
 	}
 

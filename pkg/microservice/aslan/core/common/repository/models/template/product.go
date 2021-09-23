@@ -33,6 +33,7 @@ type Product struct {
 	Visibility     string          `bson:"visibility"                json:"visibility"`
 	Timeout        int             `bson:"timeout,omitempty"         json:"timeout,omitempty"`
 	Services       [][]string      `bson:"services"                  json:"services"`
+	SharedServices []*ServiceInfo  `bson:"shared_services,omitempty" json:"shared_services,omitempty"`
 	Vars           []*RenderKV     `bson:"vars"                      json:"vars"`
 	EnvVars        []*EnvRenderKV  `bson:"-"                         json:"env_vars,omitempty"`
 	ChartInfos     []*RenderChart  `bson:"-"                         json:"chart_infos,omitempty"`
@@ -66,6 +67,11 @@ type Product struct {
 	IsOpensource               bool     `bson:"is_opensource"             json:"is_opensource"`
 }
 
+type ServiceInfo struct {
+	Name  string `bson:"name"  json:"name"`
+	Owner string `bson:"owner" json:"owner"`
+}
+
 type Team struct {
 	ID   int    `bson:"id" json:"id"`
 	Name string `bson:"name" json:"name"`
@@ -84,12 +90,27 @@ type EnvRenderKV struct {
 	Vars    []*RenderKV `json:"vars"`
 }
 
+type GitRepoConfig struct {
+	CodehostID int    `bson:"codehost_id,omitempty"`
+	Owner      string `bson:"owner,omitempty"`
+	Repo       string `bson:"repo,omitempty"`
+	Branch     string `bson:"branch,omitempty"`
+}
+
+type OverrideYaml struct {
+	YamlSource    string         `bson:"yaml_source,omitempty"     json:"yaml_source,omitempty"`
+	YamlContent   string         `bson:"yaml_content,omitempty"    json:"yaml_content,omitempty"`
+	GitRepoConfig *GitRepoConfig `bson:"git_repo_config,omitempty"   json:"gitRepoConfig,omitempty"`
+	ValuesPaths   []string       `bson:"values_paths,omitempty"    json:"values_paths,omitempty"`
+}
+
 // RenderChart ...
 type RenderChart struct {
-	ServiceName  string `bson:"service_name,omitempty"    json:"service_name,omitempty"`
-	ChartVersion string `bson:"chart_version,omitempty"   json:"chart_version,omitempty"`
-	// ChartProject string `bson:"chart_project,omitempty"   json:"chart_project,omitempty"`
-	ValuesYaml string `bson:"values_yaml,omitempty"     json:"values_yaml,omitempty"`
+	ServiceName    string        `bson:"service_name,omitempty"    json:"service_name,omitempty"`
+	ChartVersion   string        `bson:"chart_version,omitempty"   json:"chart_version,omitempty"`
+	ValuesYaml     string        `bson:"values_yaml,omitempty"     json:"values_yaml,omitempty"`
+	OverrideYaml   *OverrideYaml `bson:"override_yaml,omitempty"   json:"override_yaml,omitempty"`
+	OverrideValues string        `bson:"override_values,omitempty"   json:"override_values,omitempty"`
 }
 
 type ProductFeature struct {
@@ -103,6 +124,8 @@ type ProductFeature struct {
 	TechArch string `bson:"tech_arch"                      json:"tech_arch"`
 	// 开发习惯，interface_mode 或者 yaml
 	DevelopHabit string `bson:"develop_habit"              json:"develop_habit"`
+	// 创建环境方式,system/external(系统创建/外部环境)
+	CreateEnvType string `bson:"create_env_type"           json:"create_env_type"`
 }
 
 type ForkProject struct {
@@ -114,6 +137,49 @@ type ForkProject struct {
 
 func (Product) TableName() string {
 	return "template_product"
+}
+
+func (p *Product) AllServiceInfos() []*ServiceInfo {
+	var res []*ServiceInfo
+	ss := p.AllServiceInfoMap()
+	for _, s := range ss {
+		res = append(res, s)
+	}
+
+	return res
+}
+
+func (p *Product) GetServiceInfo(name string) *ServiceInfo {
+	return p.AllServiceInfoMap()[name]
+}
+
+func (p *Product) SharedServiceInfoMap() map[string]*ServiceInfo {
+	res := make(map[string]*ServiceInfo)
+	for _, s := range p.SharedServices {
+		res[s.Name] = s
+	}
+
+	return res
+}
+
+// AllServiceInfoMap returns all services which are bound to this product, including the shared ones.
+// note that p.Services contains all services names including the shared ones, so we need to override their owner.
+func (p *Product) AllServiceInfoMap() map[string]*ServiceInfo {
+	res := make(map[string]*ServiceInfo)
+	for _, sg := range p.Services {
+		for _, name := range sg {
+			res[name] = &ServiceInfo{
+				Name:  name,
+				Owner: p.ProductName,
+			}
+		}
+	}
+
+	for _, s := range p.SharedServices {
+		res[s.Name] = s
+	}
+
+	return res
 }
 
 func (r *RenderKV) SetAlias() {
@@ -141,4 +207,11 @@ func (r *RenderKV) RemoveDupServices() {
 		}
 	}
 	r.Services = result
+}
+
+func (rc *RenderChart) GetOverrideYaml() string {
+	if rc.OverrideYaml == nil {
+		return ""
+	}
+	return rc.OverrideYaml.YamlContent
 }

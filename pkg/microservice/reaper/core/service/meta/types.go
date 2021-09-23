@@ -110,6 +110,7 @@ type Context struct {
 	StorageAK       string `yaml:"storage_ak"`
 	StorageSK       string `yaml:"storage_sk"`
 	StorageBucket   string `yaml:"storage_bucket"`
+	StorageProvider int    `yaml:"storage_provider"`
 }
 
 // DockerBuildCtx ...
@@ -243,7 +244,7 @@ type Repo struct {
 // e.g. github returns refs/pull/1/head
 // e.g. gitlab returns merge-requests/1/head
 func (r *Repo) PRRef() string {
-	if strings.ToLower(r.Source) == ProviderGitlab {
+	if strings.ToLower(r.Source) == ProviderGitlab || strings.ToLower(r.Source) == ProviderCodehub {
 		return fmt.Sprintf("merge-requests/%d/head", r.PR)
 	} else if strings.ToLower(r.Source) == ProviderGerrit {
 		return r.CheckoutRef
@@ -378,7 +379,7 @@ func (g *Git) HTTPSCloneURL(source, token, owner, name string) string {
 // e.g.
 //https://oauth2:ACCESS_TOKEN@somegitlab.com/owner/name.git
 func (g *Git) OAuthCloneURL(source, token, address, owner, name, scheme string) string {
-	if strings.ToLower(source) == ProviderGitlab {
+	if strings.ToLower(source) == ProviderGitlab || strings.ToLower(source) == ProviderIlyshin {
 		// address 需要传过来
 		return fmt.Sprintf("%s://%s:%s@%s/%s/%s.git", scheme, OauthTokenPrefix, token, address, owner, name)
 	}

@@ -31,6 +31,7 @@ import (
 
 	commonmodels "github.com/koderover/zadig/pkg/microservice/aslan/core/common/repository/models"
 	"github.com/koderover/zadig/pkg/microservice/aslan/core/common/repository/models/template"
+	"github.com/koderover/zadig/pkg/microservice/aslan/core/common/repository/mongodb"
 	commonservice "github.com/koderover/zadig/pkg/microservice/aslan/core/common/service"
 	"github.com/koderover/zadig/pkg/microservice/aslan/core/environment/service"
 	"github.com/koderover/zadig/pkg/setting"
@@ -93,6 +94,37 @@ func AutoUpdateProduct(c *gin.Context) {
 
 	force, _ := strconv.ParseBool(c.Query("force"))
 	ctx.Resp, ctx.Err = service.AutoUpdateProduct(args.EnvNames, c.Param("productName"), ctx.User.ID, ctx.User.IsSuperUser, ctx.RequestID, force, ctx.Logger)
+}
+
+func CreateHelmProduct(c *gin.Context) {
+	ctx := internalhandler.NewContext(c)
+	defer func() { internalhandler.JSONResponse(c, ctx) }()
+
+	if c.Param("productName") == "" {
+		ctx.Err = e.ErrInvalidParam.AddDesc("productName can not be null!")
+		return
+	}
+
+	args := new(service.CreateHelmProductArg)
+	data, err := c.GetRawData()
+	if err != nil {
+		log.Errorf("CreateProduct c.GetRawData() err : %v", err)
+	}
+	if err = json.Unmarshal(data, args); err != nil {
+		log.Errorf("CreateProduct json.Unmarshal err : %v", err)
+	}
+	args.ProductName = c.Param("productName")
+
+	if args.EnvName == "" {
+		ctx.Err = e.ErrInvalidParam.AddDesc("envName can not be null!")
+		return
+	}
+
+	internalhandler.InsertOperationLog(c, ctx.Username, args.ProductName, "新增", "集成环境", args.EnvName, fmt.Sprintf("%s,%s", permission.TestEnvCreateUUID, permission.ProdEnvCreateUUID), string(data), ctx.Logger)
+
+	ctx.Err = service.CreateHelmProduct(
+		ctx.Username, ctx.RequestID, args, ctx.Logger,
+	)
 }
 
 func CreateProduct(c *gin.Context) {
@@ -192,9 +224,41 @@ func UpdateHelmProduct(c *gin.Context) {
 	updateType := c.Query("updateType")
 	productName := c.Param("productName")
 
-	ctx.Err = service.UpdateHelmProduct(productName, envName, updateType, ctx.Username, ctx.RequestID, ctx.Logger)
+	ctx.Err = service.UpdateHelmProduct(productName, envName, updateType, ctx.Username, ctx.RequestID, nil, ctx.Logger)
 	if ctx.Err != nil {
 		ctx.Logger.Errorf("failed to update product %s %s: %v", envName, productName, ctx.Err)
+	}
+}
+
+func UpdateHelmProductRenderCharts(c *gin.Context) {
+	ctx := internalhandler.NewContext(c)
+	defer func() { internalhandler.JSONResponse(c, ctx) }()
+
+	productName := c.Param("productName")
+	if productName == "" {
+		ctx.Err = e.ErrInvalidParam.AddDesc("productName can't be empty!")
+		return
+	}
+
+	envName := c.Query("envName")
+	if envName == "" {
+		ctx.Err = e.ErrInvalidParam.AddDesc("envName can't be empty!")
+		return
+	}
+
+	arg := new(service.EnvRenderChartArg)
+	data, err := c.GetRawData()
+	if err != nil {
+		log.Errorf("UpdateHelmProductVariable c.GetRawData() err : %v", err)
+	}
+	if err = json.Unmarshal(data, arg); err != nil {
+		log.Errorf("UpdateHelmProductVariable json.Unmarshal err : %v", err)
+	}
+	internalhandler.InsertOperationLog(c, ctx.Username, c.Param("productName"), "更新", "更新环境变量", "", permission.TestEnvManageUUID, string(data), ctx.Logger)
+
+	ctx.Err = service.UpdateHelmProductRenderCharts(productName, envName, ctx.Username, ctx.RequestID, arg.ChartValues, ctx.Logger)
+	if ctx.Err != nil {
+		ctx.Logger.Errorf("failed to update product Variable %s %s: %v", envName, productName, ctx.Err)
 	}
 }
 
@@ -222,10 +286,36 @@ func UpdateHelmProductVariable(c *gin.Context) {
 		return
 	}
 
-	ctx.Err = service.UpdateHelmProductVariable(productName, envName, ctx.Username, ctx.RequestID, args.ChartInfos, ctx.Logger)
+	ctx.Err = service.UpdateHelmProductVariable(productName, envName, ctx.Username, ctx.RequestID, args.ChartInfos, args.ChartInfos, ctx.Logger)
 	if ctx.Err != nil {
 		ctx.Logger.Errorf("failed to update product Variable %s %s: %v", envName, productName, ctx.Err)
 	}
+}
+
+func UpdateMultiHelmEnv(c *gin.Context) {
+	ctx := internalhandler.NewContext(c)
+	defer func() { internalhandler.JSONResponse(c, ctx) }()
+
+	if c.Param("productName") == "" {
+		ctx.Err = e.ErrInvalidParam.AddDesc("productName can not be null!")
+		return
+	}
+
+	args := new(service.UpdateMultiHelmProductArg)
+	data, err := c.GetRawData()
+	if err != nil {
+		log.Errorf("CreateProduct c.GetRawData() err : %v", err)
+	}
+	if err = json.Unmarshal(data, args); err != nil {
+		log.Errorf("CreateProduct json.Unmarshal err : %v", err)
+	}
+	args.ProductName = c.Param("productName")
+
+	internalhandler.InsertOperationLog(c, ctx.Username, args.ProductName, "更新", "集成环境", strings.Join(args.EnvNames, ","), fmt.Sprintf("%s,%s", permission.TestEnvCreateUUID, permission.ProdEnvCreateUUID), string(data), ctx.Logger)
+
+	ctx.Resp, ctx.Err = service.UpdateMultipleHelmEnv(
+		ctx.Username, ctx.RequestID, ctx.User.ID, ctx.User.IsSuperUser, args, ctx.Logger,
+	)
 }
 
 func UpdateMultiHelmProduct(c *gin.Context) {
@@ -306,6 +396,26 @@ func GetHelmChartVersions(c *gin.Context) {
 	}
 }
 
+func GetEstimatedRenderCharts(c *gin.Context) {
+	ctx := internalhandler.NewContext(c)
+	defer func() { internalhandler.JSONResponse(c, ctx) }()
+
+	productName := c.Query("productName")
+	if productName == "" {
+		ctx.Err = e.ErrInvalidParam.AddDesc("productName can't be empty!")
+	}
+
+	envName := c.Query("envName")
+	if envName == "" {
+		ctx.Err = e.ErrInvalidParam.AddDesc("envName can't be empty!")
+	}
+
+	ctx.Resp, ctx.Err = service.GetEstimatedRenderCharts(productName, envName, c.Query("serviceName"), ctx.Logger)
+	if ctx.Err != nil {
+		ctx.Logger.Errorf("failed to get estimatedRenderCharts %s %s: %v", envName, productName, ctx.Err)
+	}
+}
+
 func DeleteProduct(c *gin.Context) {
 	ctx := internalhandler.NewContext(c)
 	defer func() { internalhandler.JSONResponse(c, ctx) }()
@@ -357,39 +467,109 @@ func ListGroups(c *gin.Context) {
 	envName := c.Query("envName")
 	serviceName := c.Query("serviceName")
 	perPageStr := c.Query("perPage")
-	perPage := 0
+	pageStr := c.Query("page")
+	var (
+		count   int
+		perPage int
+		err     error
+		page    int
+	)
 	if perPageStr == "" {
 		perPage = setting.PerPage
 	} else {
-		perPage, _ = strconv.Atoi(perPageStr)
+		perPage, err = strconv.Atoi(perPageStr)
+		if err != nil {
+			ctx.Err = e.ErrInvalidParam.AddDesc(fmt.Sprintf("pageStr args err :%s", err))
+			return
+		}
 	}
 
-	pageStr := c.Query("page")
-	page := 0
 	if pageStr == "" {
 		page = 1
 	} else {
-		page, _ = strconv.Atoi(pageStr)
+		page, err = strconv.Atoi(pageStr)
+		if err != nil {
+			ctx.Err = e.ErrInvalidParam.AddDesc(fmt.Sprintf("page args err :%s", err))
+			return
+		}
 	}
 
-	count := 0
 	ctx.Resp, count, ctx.Err = service.ListGroups(serviceName, envName, productName, perPage, page, ctx.Logger)
 	c.Writer.Header().Set("X-Total", strconv.Itoa(count))
 }
 
-func ListGroupsBySource(c *gin.Context) {
+type ListWorkloadsArgs struct {
+	Namespace    string `json:"namespace"    form:"namespace"`
+	ClusterID    string `json:"clusterId"    form:"clusterId"`
+	WorkloadName string `json:"workloadName" form:"workloadName"`
+	PerPage      int    `json:"perPage"      form:"perPage,default:20"`
+	Page         int    `json:"page"         form:"page,default:1"`
+}
+
+func ListWorkloads(c *gin.Context) {
+	ctx := internalhandler.NewContext(c)
+	defer func() { internalhandler.JSONResponse(c, ctx) }()
+	args := new(ListWorkloadsArgs)
+	if err := c.ShouldBindQuery(args); err != nil {
+		ctx.Err = e.ErrInvalidParam.AddDesc(err.Error())
+		return
+	}
+
+	count, services, err := commonservice.ListWorkloads("", args.ClusterID, args.Namespace, "", args.PerPage, args.Page, ctx.Logger, func(workloads []*commonservice.Workload) []*commonservice.Workload {
+		workloadStat, _ := mongodb.NewWorkLoadsStatColl().Find(args.ClusterID, args.Namespace)
+		workloadM := map[string]commonmodels.Workload{}
+		for _, workload := range workloadStat.Workloads {
+			workloadM[workload.Name] = workload
+		}
+		for index, currentWorkload := range workloads {
+			if existWorkload, ok := workloadM[currentWorkload.Name]; ok {
+				workloads[index].EnvName = existWorkload.EnvName
+				workloads[index].ProductName = existWorkload.ProductName
+			}
+		}
+
+		var resp []*commonservice.Workload
+		for _, workload := range workloads {
+			if args.WorkloadName != "" && strings.Contains(workload.Name, args.WorkloadName) {
+				resp = append(resp, workload)
+			} else if args.WorkloadName == "" {
+				resp = append(resp, workload)
+			}
+		}
+
+		return resp
+	})
+	ctx.Resp = &NamespaceResource{
+		Services: services,
+	}
+	ctx.Err = err
+	c.Writer.Header().Set("X-Total", strconv.Itoa(count))
+}
+
+// TODO: envName must be a param, while productName can be a query
+type workloadQueryArgs struct {
+	Env     string `json:"env"     form:"env"`
+	PerPage int    `json:"perPage" form:"perPage,default=10"`
+	Page    int    `json:"page"    form:"page,default=1"`
+	Filter  string `json:"filter"  form:"filter"`
+}
+
+func ListWorkloadsInEnv(c *gin.Context) {
 	ctx := internalhandler.NewContext(c)
 	defer func() { internalhandler.JSONResponse(c, ctx) }()
 
-	envName := c.Query("envName")
-	productName := c.Param("productName")
+	args := &workloadQueryArgs{}
+	if err := c.ShouldBindQuery(args); err != nil {
+		ctx.Err = err
+		return
+	}
 
-	services, ingresses, err := commonservice.ListGroupsBySource(envName, productName, ctx.Logger)
+	count, services, err := commonservice.ListWorkloadsInEnv(args.Env, c.Param("productName"), args.Filter, args.PerPage, args.Page, ctx.Logger)
 	ctx.Resp = &NamespaceResource{
-		Services:  services,
-		Ingresses: ingresses,
+		Services: services,
 	}
 	ctx.Err = err
+	c.Writer.Header().Set("X-Total", strconv.Itoa(count))
 }
 
 func ListProductsSSE(c *gin.Context) {

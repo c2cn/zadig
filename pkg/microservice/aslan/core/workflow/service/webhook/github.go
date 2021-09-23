@@ -553,12 +553,11 @@ func updateServiceTemplateByGithubPush(pushEvent *github.PushEvent, log *zap.Sug
 }
 
 func GetGithubServiceTemplates() ([]*commonmodels.Service, error) {
-	opt := &commonrepo.ServiceFindOption{
+	opt := &commonrepo.ServiceListOption{
 		Type:          setting.K8SDeployType,
 		Source:        setting.SourceFromGithub,
-		ExcludeStatus: setting.ProductStatusDeleting,
 	}
-	return commonrepo.NewServiceColl().List(opt)
+	return commonrepo.NewServiceColl().ListMaxRevisions(opt)
 }
 
 // GetOwnerRepoBranchPath 获取gitlab路径中的owner、repo、branch和path
@@ -581,7 +580,7 @@ func GetOwnerRepoBranchPath(URL string) (string, string, string, string, string,
 		return "", "", "", "", "", "", fmt.Errorf("url is illegal")
 	}
 
-	address, err := GetGitlabAddress(URL)
+	address, err := GetAddress(URL)
 	if err != nil {
 		return "", "", "", "", "", "", err
 	}
@@ -593,7 +592,7 @@ func GetOwnerRepoBranchPath(URL string) (string, string, string, string, string,
 	return address, urlPathArray[3], urlPathArray[4], "", "", pathType, nil
 }
 
-func GetGitlabAddress(URL string) (string, error) {
+func GetAddress(URL string) (string, error) {
 	if !strings.Contains(URL, "https") && !strings.Contains(URL, "http") {
 		return "", fmt.Errorf("url is illegal")
 	}
@@ -630,7 +629,7 @@ func SyncServiceTemplateFromGithub(service *commonmodels.Service, latestCommitID
 		return nil
 	}
 	// 在Ensure过程中会检查source，如果source为github，则同步github内容到service中
-	if err := fillServiceTmpl(service, log); err != nil {
+	if err := fillServiceTmpl(setting.WebhookTaskCreator, service, log); err != nil {
 		log.Errorf("ensure github serviceTmpl failed, error: %+v", err)
 		return e.ErrValidateTemplate.AddDesc(err.Error())
 	}

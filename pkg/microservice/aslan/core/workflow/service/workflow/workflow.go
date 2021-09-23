@@ -64,7 +64,10 @@ func AutoCreateWorkflow(productName string, log *zap.SugaredLogger) *EnvStatus {
 	// 云主机场景不创建ops工作流
 	if productTmpl.ProductFeature != nil && productTmpl.ProductFeature.BasicFacility == "cloud_host" {
 		workflowNames = []string{productName + "-workflow-dev", productName + "-workflow-qa"}
+	} else if productTmpl.ProductFeature != nil && productTmpl.ProductFeature.CreateEnvType == setting.SourceFromExternal {
+		workflowNames = []string{productName + "-workflow-dev"}
 	}
+
 	workflowSlice := sets.NewString()
 	for _, workflowName := range workflowNames {
 		_, err := FindWorkflow(workflowName, log)
@@ -227,11 +230,7 @@ func PreSetWorkflow(productName string, log *zap.SugaredLogger) ([]*PreSetResp, 
 		log.Errorf("[%s] ProductTmpl.Find error: %v", productName, err)
 		return resp, e.ErrGetTemplate.AddDesc(err.Error())
 	}
-	var svcNames []string
-	for _, ss := range productTmpl.Services {
-		svcNames = append(svcNames, ss...)
-	}
-	services, err := commonrepo.NewServiceColl().ListMaxRevisionsForServices(svcNames, "")
+	services, err := commonrepo.NewServiceColl().ListMaxRevisionsForServices(productTmpl.AllServiceInfos(), "")
 	if err != nil {
 		log.Errorf("ServiceTmpl.ListMaxRevisions error: %v", err)
 		return resp, e.ErrListTemplate.AddDesc(err.Error())

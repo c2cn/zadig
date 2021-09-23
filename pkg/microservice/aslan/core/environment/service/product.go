@@ -94,7 +94,6 @@ func GetInitProduct(productTmplName string, log *zap.SugaredLogger) (*commonmode
 		log.Error(errMsg)
 		return nil, e.ErrGetProduct.AddDesc(errMsg)
 	}
-
 	if prodTmpl.ProductFeature == nil || prodTmpl.ProductFeature.DeployType == setting.K8SDeployType {
 		err = commonservice.FillProductTemplateVars([]*templatemodels.Product{prodTmpl}, log)
 	} else if prodTmpl.ProductFeature.DeployType == setting.HelmDeployType {
@@ -117,49 +116,45 @@ func GetInitProduct(productTmplName string, log *zap.SugaredLogger) (*commonmode
 	ret.Render = &commonmodels.RenderInfo{Name: "", Description: ""}
 	ret.Vars = prodTmpl.Vars
 	ret.ChartInfos = prodTmpl.ChartInfos
+	if prodTmpl.ProductFeature.BasicFacility == setting.BasicFacilityCVM {
+		ret.Source = setting.PMDeployType
+	}
 
+	allServiceInfoMap := prodTmpl.AllServiceInfoMap()
 	for _, names := range prodTmpl.Services {
 		servicesResp := make([]*commonmodels.ProductService, 0)
 
 		for _, serviceName := range names {
 			opt := &commonrepo.ServiceFindOption{
 				ServiceName:   serviceName,
+				ProductName:   allServiceInfoMap[serviceName].Owner,
 				ExcludeStatus: setting.ProductStatusDeleting,
 			}
 
-			serviceTmpls, err := commonrepo.NewServiceColl().List(opt)
+			serviceTmpl, err := commonrepo.NewServiceColl().Find(opt)
 			if err != nil {
-				errMsg := fmt.Sprintf("[ServiceTmpl.List] %s error: %v", opt.ServiceName, err)
+				errMsg := fmt.Sprintf("Can not find service with option %+v, error: %v", opt, err)
 				log.Error(errMsg)
 				return nil, e.ErrGetProduct.AddDesc(errMsg)
 			}
-			for _, serviceTmpl := range serviceTmpls {
-				serviceResp := &commonmodels.ProductService{
-					ServiceName: serviceTmpl.ServiceName,
-					Type:        serviceTmpl.Type,
-					Revision:    serviceTmpl.Revision,
-				}
-				if serviceTmpl.Type == setting.K8SDeployType {
-					serviceResp.Containers = make([]*commonmodels.Container, 0)
-					for _, c := range serviceTmpl.Containers {
-						container := &commonmodels.Container{
-							Name:  c.Name,
-							Image: c.Image,
-						}
-						serviceResp.Containers = append(serviceResp.Containers, container)
-					}
-				} else if serviceTmpl.Type == setting.HelmDeployType {
-					serviceResp.Containers = make([]*commonmodels.Container, 0)
-					for _, c := range serviceTmpl.Containers {
-						container := &commonmodels.Container{
-							Name:  c.Name,
-							Image: c.Image,
-						}
-						serviceResp.Containers = append(serviceResp.Containers, container)
-					}
-				}
-				servicesResp = append(servicesResp, serviceResp)
+
+			serviceResp := &commonmodels.ProductService{
+				ServiceName: serviceTmpl.ServiceName,
+				ProductName: serviceTmpl.ProductName,
+				Type:        serviceTmpl.Type,
+				Revision:    serviceTmpl.Revision,
 			}
+			if serviceTmpl.Type == setting.K8SDeployType || serviceTmpl.Type == setting.HelmDeployType {
+				serviceResp.Containers = make([]*commonmodels.Container, 0)
+				for _, c := range serviceTmpl.Containers {
+					container := &commonmodels.Container{
+						Name:  c.Name,
+						Image: c.Image,
+					}
+					serviceResp.Containers = append(serviceResp.Containers, container)
+				}
+			}
+			servicesResp = append(servicesResp, serviceResp)
 		}
 		ret.Services = append(ret.Services, servicesResp)
 	}
@@ -252,7 +247,7 @@ func buildProductResp(envName string, prod *commonmodels.Product, log *zap.Sugar
 
 	switch prod.Source {
 	case setting.SourceFromExternal, setting.SourceFromHelm:
-		servicesResp, _, errObj = commonservice.ListGroupsBySource(envName, prod.ProductName, log)
+		_, servicesResp, errObj = commonservice.ListWorkloadsInEnv(envName, prod.ProductName, "", 0, 0, log)
 		if len(servicesResp) == 0 && errObj == nil {
 			prodResp.Status = prod.Status
 			prodResp.Error = prod.Error
@@ -275,6 +270,7 @@ func buildProductResp(envName string, prod *commonmodels.Product, log *zap.Sugar
 			}
 		}
 
+		//TODO is it reasonable to ignore error when all pods are running？
 		if allRunning {
 			prodResp.Status = setting.PodRunning
 			prodResp.Error = ""

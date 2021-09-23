@@ -117,6 +117,10 @@ func (p *BuildTaskPlugin) Run(ctx context.Context, pipelineTask *task.Task, pipe
 		envNameVar := &task.KeyVal{Key: "ENV_NAME", Value: envName, IsCredential: false}
 		p.Task.JobCtx.EnvVars = append(p.Task.JobCtx.EnvVars, envNameVar)
 	}
+
+	taskIDVar := &task.KeyVal{Key: "TASK_ID", Value: strconv.FormatInt(pipelineTask.TaskID, 10), IsCredential: false}
+	p.Task.JobCtx.EnvVars = append(p.Task.JobCtx.EnvVars, taskIDVar)
+
 	privateKeys := sets.String{}
 	for _, privateKey := range pipelineTask.ConfigPayload.PrivateKeys {
 		privateKeys.Insert(privateKey.Name)
@@ -230,7 +234,12 @@ func (p *BuildTaskPlugin) Run(ctx context.Context, pipelineTask *task.Task, pipe
 
 	// 将集成到KodeRover的私有镜像仓库的访问权限设置到namespace中
 	if err := createOrUpdateRegistrySecrets(p.KubeNamespace, p.Task.Registries, p.kubeClient); err != nil {
-		p.Log.Errorf("create secret error: %v", err)
+		msg := fmt.Sprintf("create secret error: %v", err)
+		p.Log.Error(msg)
+		p.Task.TaskStatus = config.StatusFailed
+		p.Task.Error = msg
+		p.SetBuildStatusCompleted(config.StatusFailed)
+		return
 	}
 	if err := updater.CreateJob(job, p.kubeClient); err != nil {
 		msg := fmt.Sprintf("create build job error: %v", err)

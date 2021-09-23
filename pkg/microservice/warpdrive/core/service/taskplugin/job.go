@@ -49,6 +49,7 @@ import (
 	"github.com/koderover/zadig/pkg/tool/kube/podexec"
 	"github.com/koderover/zadig/pkg/tool/kube/updater"
 	"github.com/koderover/zadig/pkg/tool/log"
+	s3tool "github.com/koderover/zadig/pkg/tool/s3"
 	"github.com/koderover/zadig/pkg/util"
 )
 
@@ -112,12 +113,19 @@ func saveContainerLog(pipelineTask *task.Task, namespace, fileName string, jobLa
 			} else {
 				store.Subfolder = fmt.Sprintf("%s/%d/%s", pipelineTask.PipelineName, pipelineTask.TaskID, "log")
 			}
-
-			if err = s3.Upload(
-				context.Background(),
-				store,
+			forcedPathStyle := true
+			if store.Provider == setting.ProviderSourceAli {
+				forcedPathStyle = false
+			}
+			s3client, err := s3tool.NewClient(store.Endpoint, store.Ak, store.Sk, store.Insecure, forcedPathStyle)
+			if err != nil {
+				return fmt.Errorf("saveContainerLog s3 create client error: %v", err)
+			}
+			objectKey := store.GetObjectPath(fileName + ".log")
+			if err = s3client.Upload(
+				store.Bucket,
 				tempFileName,
-				fileName+".log",
+				objectKey,
 			); err != nil {
 				return fmt.Errorf("saveContainerLog s3 Upload error: %v", err)
 			}
@@ -300,6 +308,7 @@ func (b *JobCtxBuilder) BuildReaperContext(pipelineTask *task.Task, serviceName 
 	ctx.StorageAK = pipelineTask.ConfigPayload.S3Storage.Ak
 	ctx.StorageSK = pipelineTask.ConfigPayload.S3Storage.Sk
 	ctx.StorageBucket = pipelineTask.ConfigPayload.S3Storage.Bucket
+	ctx.StorageProvider = pipelineTask.ConfigPayload.S3Storage.Provider
 
 	return ctx
 }
@@ -401,7 +410,7 @@ func buildJobWithLinkedNs(taskType config.TaskType, jobImage, jobName, serviceNa
 	// 引用集成到系统中的私有镜像仓库的访问权限
 	ImagePullSecrets := []corev1.LocalObjectReference{
 		{
-			Name: "qn-registry-secret",
+			Name: setting.DefaultImagePullSecret,
 		},
 	}
 	for _, reg := range registries {
@@ -508,9 +517,12 @@ func createOrUpdateRegistrySecrets(namespace string, registries []*task.Registry
 
 		arr := strings.Split(reg.Namespace, "/")
 		namespaceInRegistry := arr[len(arr)-1]
-		secretName := namespaceInRegistry + "-" + reg.RegType + "-registry-secret"
+		secretName := namespaceInRegistry + registrySecretSuffix
+		if reg.RegType != "" {
+			secretName = namespaceInRegistry + "-" + reg.RegType + registrySecretSuffix
+		}
 		if reg.RegAddr == config.DefaultRegistryAddr() {
-			secretName = "qn-registry-secret"
+			secretName = setting.DefaultImagePullSecret
 		}
 
 		data := make(map[string][]byte)
